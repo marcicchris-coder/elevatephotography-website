@@ -190,20 +190,46 @@ function pickImage(item) {
   return "";
 }
 
+function canonicalImageKey(value) {
+  if (typeof value !== "string") return "";
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return value.trim();
+  }
+}
+
 function looksLikeImageUrl(value) {
   if (typeof value !== "string") return false;
   if (!/^https?:\/\//.test(value)) return false;
-  const lower = value.toLowerCase();
-  return [".jpg", ".jpeg", ".png", ".webp", ".gif", "image", "photo", "media"].some((token) => lower.includes(token));
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+
+  const pathname = parsed.pathname.toLowerCase();
+  const search = parsed.search.toLowerCase();
+  const hasImageExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"].some((ext) => pathname.endsWith(ext));
+  const hasImageHint = ["format=jpg", "format=jpeg", "format=png", "format=webp", "fm=jpg", "fm=png", "fm=webp"].some((hint) => search.includes(hint));
+  const looksNonImage = [".mp4", ".mov", ".pdf", ".zip"].some((ext) => pathname.endsWith(ext));
+
+  if (looksNonImage) return false;
+  return hasImageExt || hasImageHint;
 }
 
-function collectImageUrls(item, results = new Set()) {
+function collectImageUrls(item, results = new Map()) {
   if (!item || typeof item !== "object") return results;
 
   Object.entries(item).forEach(([key, value]) => {
     if (typeof value === "string" && looksLikeImageUrl(value)) {
       if (/(photo|image|thumbnail|cover|hero|media|url)/i.test(key) || looksLikeImageUrl(value)) {
-        results.add(value);
+        const dedupeKey = canonicalImageKey(value);
+        if (!results.has(dedupeKey)) {
+          results.set(dedupeKey, value);
+        }
       }
       return;
     }
@@ -221,6 +247,32 @@ function collectImageUrls(item, results = new Set()) {
   return results;
 }
 
+function sanitizeShootMedia(shoot) {
+  const rawThumb = typeof shoot?.thumbnail_url === "string" ? shoot.thumbnail_url : "";
+  const thumbKey = canonicalImageKey(rawThumb);
+  const unique = new Map();
+
+  const candidatePhotos = Array.isArray(shoot?.photos) ? shoot.photos : [];
+  candidatePhotos.forEach((value) => {
+    if (!looksLikeImageUrl(value)) return;
+    const key = canonicalImageKey(value);
+    if (!key) return;
+    if (key === thumbKey) return;
+    if (!unique.has(key)) unique.set(key, value);
+  });
+
+  const photos = [...unique.values()].slice(0, 24);
+  const thumbnailUrl = looksLikeImageUrl(rawThumb) ? rawThumb : (photos[0] || "");
+
+  return {
+    ...shoot,
+    thumbnail_url: thumbnailUrl,
+    photos: thumbnailUrl
+      ? photos.filter((value) => canonicalImageKey(value) !== canonicalImageKey(thumbnailUrl))
+      : photos
+  };
+}
+
 function normalizeShoot(order) {
   const listing = order?.listing || order?.property || {};
   const appointment = Array.isArray(order?.appointments) && order.appointments.length ? order.appointments[0] : order?.appointment || {};
@@ -234,8 +286,8 @@ function normalizeShoot(order) {
     order?.created_at ||
     null;
 
-  const photos = [...collectImageUrls(order)].slice(0, 24);
-  return {
+  const photos = [...collectImageUrls(order).values()].slice(0, 24);
+  return sanitizeShootMedia({
     id: order?.id || order?.uuid || "unknown",
     address: normalizeAddress(listing?.address || order?.address || listing),
     status: order?.status || order?.state || "Unknown",
@@ -244,7 +296,7 @@ function normalizeShoot(order) {
     updated_at: order?.updated_at || null,
     thumbnail_url: pickImage(order),
     photos
-  };
+  });
 }
 
 function getShootSortTimestamp(shoot) {
@@ -380,7 +432,9 @@ async function handleShoots(req, res, url) {
     refreshShootsCacheInBackground();
   }
 
-  const shoots = shootsCache.shoots.slice(0, pageSize);
+  const shoots = shootsCache.shoots
+    .map((shoot) => sanitizeShootMedia(shoot))
+    .slice(0, pageSize);
 
   writeJson(res, 200, {
     shoots,

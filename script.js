@@ -164,6 +164,13 @@ if (shootGrid && shootsStatus) {
           </article>
         `;
       }).join("");
+
+      // Remove broken images so failed URLs do not show broken placeholders.
+      shootGrid.querySelectorAll("img.shoot-thumb, img.shoot-photo").forEach((img) => {
+        img.addEventListener("error", () => {
+          img.remove();
+        }, { once: true });
+      });
     })
     .catch((error) => {
       shootsStatus.textContent = `Could not load shoots: ${error.message}`;
