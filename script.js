@@ -68,6 +68,22 @@ function formatLocationLabel(address) {
   return String(address);
 }
 
+function normalizeMediaKey(url) {
+  if (!url) return "";
+  const raw = String(url).trim();
+  const uuidMatch = raw.toLowerCase().match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/);
+  if (uuidMatch) return `uuid:${uuidMatch[0]}`;
+
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.hostname}${decodeURIComponent(parsed.pathname).toLowerCase()
+      .replace(/-\d+x\d+(?=\.[a-z0-9]+$)/g, "")
+      .replace(/_(thumb|thumbnail|small|medium|large|xl)(?=\.[a-z0-9]+$)/g, "")}`;
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
 const linkNodes = [...document.querySelectorAll("[data-link-key]")];
 if (linkNodes.length) {
   linkNodes.forEach((node) => {
@@ -144,10 +160,21 @@ if (shootGrid && shootsStatus) {
 
       shootsStatus.textContent = `${shoots.length} shoots loaded.`;
       shootGrid.innerHTML = shoots.map((shoot) => {
+        const thumbKey = normalizeMediaKey(shoot.thumbnail_url || "");
         const thumb = shoot.thumbnail_url
           ? `<img class="shoot-thumb" src="${escapeHtml(shoot.thumbnail_url)}" alt="${escapeHtml(shoot.address)}" loading="lazy" />`
           : `<div class="shoot-thumb"></div>`;
-        const photoThumbs = Array.isArray(shoot.photos) ? shoot.photos.slice(0, 8) : [];
+        const dedupedThumbs = [];
+        const seenThumbKeys = new Set(thumbKey ? [thumbKey] : []);
+        if (Array.isArray(shoot.photos)) {
+          shoot.photos.forEach((url) => {
+            const key = normalizeMediaKey(url);
+            if (!key || seenThumbKeys.has(key)) return;
+            seenThumbKeys.add(key);
+            dedupedThumbs.push(url);
+          });
+        }
+        const photoThumbs = dedupedThumbs.slice(0, 8);
         const photoGrid = photoThumbs.length
           ? `<div class="shoot-photos">${photoThumbs.map((url) => `<img class="shoot-photo" src="${escapeHtml(url)}" alt="${escapeHtml(shoot.address)} photo" loading="lazy" />`).join("")}</div>`
           : "";

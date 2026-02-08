@@ -192,12 +192,35 @@ function pickImage(item) {
 
 function canonicalImageKey(value) {
   if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const uuidMatch = trimmed.toLowerCase().match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/);
+  if (uuidMatch) return `uuid:${uuidMatch[0]}`;
+
   try {
-    const parsed = new URL(value);
-    return `${parsed.origin}${parsed.pathname}`;
+    const parsed = new URL(trimmed);
+    const normalizedPath = decodeURIComponent(parsed.pathname)
+      .toLowerCase()
+      .replace(/\/fit-in\/\d+x\d+\//g, "/")
+      .replace(/\/filters:[^/]+\//g, "/")
+      .replace(/-\d+x\d+(?=\.[a-z0-9]+$)/g, "")
+      .replace(/_(thumb|thumbnail|small|medium|large|xl)(?=\.[a-z0-9]+$)/g, "")
+      .replace(/\/+/g, "/");
+    return `${parsed.hostname}${normalizedPath}`;
   } catch {
-    return value.trim();
+    return trimmed.toLowerCase();
   }
+}
+
+function imageQualityScore(url) {
+  const lower = String(url || "").toLowerCase();
+  let score = 0;
+  if (lower.includes("original") || lower.includes("full")) score += 40;
+  if (lower.includes("large") || lower.includes("xl")) score += 20;
+  if (lower.includes("medium")) score += 10;
+  if (lower.includes("thumb") || lower.includes("thumbnail") || lower.includes("small")) score -= 20;
+  return score;
 }
 
 function looksLikeImageUrl(value) {
@@ -227,8 +250,11 @@ function collectImageUrls(item, results = new Map()) {
     if (typeof value === "string" && looksLikeImageUrl(value)) {
       if (/(photo|image|thumbnail|cover|hero|media|url)/i.test(key) || looksLikeImageUrl(value)) {
         const dedupeKey = canonicalImageKey(value);
-        if (!results.has(dedupeKey)) {
-          results.set(dedupeKey, value);
+        if (!dedupeKey) return;
+        const next = { url: value, score: imageQualityScore(value) };
+        const current = results.get(dedupeKey);
+        if (!current || next.score >= current.score) {
+          results.set(dedupeKey, next);
         }
       }
       return;
@@ -286,7 +312,10 @@ function normalizeShoot(order) {
     order?.created_at ||
     null;
 
-  const photos = [...collectImageUrls(order).values()].slice(0, 24);
+  const photos = [...collectImageUrls(order).values()]
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.url)
+    .slice(0, 24);
   return sanitizeShootMedia({
     id: order?.id || order?.uuid || "unknown",
     address: normalizeAddress(listing?.address || order?.address || listing),
