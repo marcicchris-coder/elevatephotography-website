@@ -28,7 +28,7 @@ Edit `api/.env` and set:
 ARYEO_API_TOKEN=your_real_token_here
 WEBHOOK_SECRET=your_random_secret_here
 # Optional cache tuning for faster portfolio loads
-SHOOTS_CACHE_TTL_SECONDS=21600
+SHOOTS_CACHE_TTL_SECONDS=1800
 ```
 
 Manual start (serves website + API from one server):
@@ -70,8 +70,9 @@ cd /Users/chris/Domains/elevatephotograhy-website
 ## Portfolio performance cache
 
 - `/api/shoots` now caches Aryeo results on the backend and serves from cache for fast repeat loads.
-- Default refresh interval is every 6 hours (`SHOOTS_CACHE_TTL_SECONDS=21600`).
-- When cache is stale, the API serves cached data immediately and refreshes in the background.
+- Default refresh interval is every 30 minutes (`SHOOTS_CACHE_TTL_SECONDS=1800`).
+- When cache is stale, `/api/shoots` refreshes before responding so new shoots sync faster.
+- You can force an immediate refresh with `/api/shoots?limit=24&refresh=1`.
 
 ## Aryeo webhook target
 
@@ -95,7 +96,7 @@ Include header:
    - `ARYEO_API_TOKEN`
    - `WEBHOOK_SECRET`
    - `ARYEO_API_BASE=https://api.aryeo.com/v1`
-   - `SHOOTS_CACHE_TTL_SECONDS=43200`
+  - `SHOOTS_CACHE_TTL_SECONDS=1800`
 4. Generate a public Railway domain and then attach your custom domain.
 5. Point DNS `www` CNAME to Railway's provided target.
 

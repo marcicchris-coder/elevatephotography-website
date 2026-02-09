@@ -422,7 +422,9 @@ function serveStatic(req, res, pathname) {
 
   const ext = path.extname(finalPath).toLowerCase();
   const contentType = STATIC_MIME_TYPES[ext] || "application/octet-stream";
-  const cacheControl = ext === ".html" ? "no-cache" : "public, max-age=3600";
+  const cacheControl = [".html", ".css", ".js"].includes(ext)
+    ? "no-cache, must-revalidate"
+    : "public, max-age=3600";
 
   res.writeHead(200, {
     "Content-Type": contentType,
@@ -521,11 +523,10 @@ function refreshShootsCacheInBackground() {
 async function handleShoots(req, res, url) {
   const limit = Number(url.searchParams.get("limit") || 24);
   const pageSize = Math.max(1, Math.min(limit, 100));
+  const forceRefresh = /^(1|true|yes)$/i.test(String(url.searchParams.get("refresh") || "").trim());
 
-  if (!shootsCache.shoots.length) {
+  if (!shootsCache.shoots.length || forceRefresh || !isShootsCacheFresh()) {
     await refreshShootsCacheInBackground();
-  } else if (!isShootsCacheFresh()) {
-    refreshShootsCacheInBackground();
   }
 
   const shoots = shootsCache.shoots
