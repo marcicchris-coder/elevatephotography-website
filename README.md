@@ -40,6 +40,14 @@ node api/server.js
 
 Then open `http://127.0.0.1:8788`.
 
+Optional helper scripts:
+
+```bash
+cd /Users/chris/Documents/elevatephotograhy-website
+./scripts/start-local.sh
+./scripts/stop-local.sh
+```
+
 ## Customize for your brand
 
 1. Update your name and email in `index.html`.
@@ -90,3 +98,13 @@ Include header:
    - `SHOOTS_CACHE_TTL_SECONDS=43200`
 4. Generate a public Railway domain and then attach your custom domain.
 5. Point DNS `www` CNAME to Railway's provided target.
+
+## Production workflow
+
+- Railway is your only public frontend + API endpoint.
+- GitHub Pages is disabled.
+- For future updates:
+  1. edit locally
+  2. `git add` / `git commit`
+  3. `git push origin main`
+  4. Railway auto-deploys
